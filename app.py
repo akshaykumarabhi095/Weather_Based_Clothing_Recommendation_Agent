@@ -29,49 +29,48 @@ def get_mock_clothing():
 
 def call_gemini_with_retry(prompt):
     """
-    1. Tries the NEWEST models first (2.5 Flash).
-    2. If busy (429), WAITS 3 seconds and Retries.
+    TOGGLE MODE: 
+    1. Tries gemini-2.5-flash.
+    2. If busy, waits 2s and tries gemini-2.0-flash.
+    3. If busy, waits 2s and tries gemini-2.5-flash again.
+    4. Repeats for up to 10 total attempts.
     """
-    # Optimized list based on your account permissions
-    # Optimized list: STABLE model first!
-    models = [
-        "gemini-2.5-flash",       # ✅ Your preferred model
-        "gemini-2.0-flash-lite",  # Backup (Fast & often less busy)
-        "gemini-1.5-flash"        # Legacy backup
-    ]
+    # The two models to swap between
+    cycle_models = ["gemini-2.5-flash", "gemini-2.0-flash"]
+    
+    # Total attempts (10 attempts * 2s wait = ~20 seconds max)
+    max_total_attempts = 10 
     
     headers = {'Content-Type': 'application/json'}
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
 
-    for model in models:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
+    for i in range(max_total_attempts):
+        # % logic swaps the model: 0->2.5, 1->2.0, 2->2.5, 3->2.0...
+        current_model = cycle_models[i % len(cycle_models)]
         
-        # Try each model up to 2 times
-        for attempt in range(2):
-            try:
-                print(f"🤖 {model} (Attempt {attempt+1})...")
-                response = requests.post(url, headers=headers, json=payload, verify=False, timeout=10)
-                
-                if response.status_code == 200:
-                    print(f"✅ Success with {model}!")
-                    return response.json()['candidates'][0]['content']['parts'][0]['text']
-                
-                elif response.status_code == 429:
-                    print(f"⚠️ {model} is busy. Waiting 3s...")
-                    time.sleep(3) # WAIT before retrying
-                    continue 
-                
-                elif response.status_code == 404:
-                    print(f"❌ {model} not found. Skipping.")
-                    break # Don't retry a 404, move to next model
-                
-                else:
-                    print(f"❌ Error {response.status_code}. Skipping.")
-                    break
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{current_model}:generateContent?key={GEMINI_API_KEY}"
+        
+        try:
+            print(f"🤖 {current_model} (Attempt {i+1}/{max_total_attempts})...")
+            response = requests.post(url, headers=headers, json=payload, verify=False, timeout=10)
+            
+            if response.status_code == 200:
+                print(f"✅ Success with {current_model}!")
+                return response.json()['candidates'][0]['content']['parts'][0]['text']
+            
+            elif response.status_code == 429:
+                print(f"⚠️ {current_model} is busy. Switching model & waiting 2s...")
+                time.sleep(2)
+                continue # Loop continues, which automatically picks the NEXT model
+            
+            else:
+                print(f"❌ Error {response.status_code} with {current_model}. Retrying in 2s...")
+                time.sleep(2)
+                continue
 
-            except Exception as e:
-                print(f"⚠️ Connection Error: {e}")
-                time.sleep(1)
+        except Exception as e:
+            print(f"⚠️ Connection Error: {e}")
+            time.sleep(2)
 
     print("❌ All AI attempts failed.")
     return None
