@@ -33,11 +33,11 @@ def call_gemini_with_retry(prompt):
     2. If busy (429), WAITS 3 seconds and Retries.
     """
     # Optimized list based on your account permissions
+    # Optimized list: STABLE model first!
     models = [
-        "gemini-2.5-flash",       # ✅ Try the newest one first (Less busy)
-        "gemini-2.0-flash",       # Standard 2.0
-        "gemini-2.0-flash-lite",  # Backup
-        "gemini-2.0-flash-001"    # Specific version fallback
+        "gemini-1.5-flash",       # ✅ STANDARD (Guaranteed to work)
+        "gemini-2.0-flash",       # Experimental fallback
+        "gemini-pro"              # Older stable fallback
     ]
     
     headers = {'Content-Type': 'application/json'}
