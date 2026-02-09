@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Based Clothing Recommendation System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* BACKGROUND IMAGE SETUP */
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-image: url('/static/bg.png');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            transition: all 0.5s ease;
+        }
+
+        .fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* === THEME CONFIGURATION === */
+        
+        /* DAY */
+        body.theme-day { 
+            background-color: rgba(255, 255, 255, 0.4); 
+            background-blend-mode: overlay; 
+            color: #0f172a; 
+        }
+
+        /* SUNSET */
+        body.theme-sunset { 
+            background-color: rgba(255, 100, 100, 0.3); 
+            background-blend-mode: soft-light; 
+            color: #450a0a; 
+        }
+
+        /* NIGHT */
+        body.theme-night { 
+            background-color: rgba(15, 23, 42, 0.9); 
+            background-blend-mode: multiply; 
+            color: #ffffff; 
+        }
+
+        /* === NAVBAR STYLES (Dynamic Blue) === */
+        nav { transition: background 0.5s ease; }
+        
+        /* Day: Bright Royal Blue */
+        .theme-day nav { background: linear-gradient(to right, #2563eb, #1e40af); }
+        
+        /* Night: Deep Navy Blue */
+        .theme-night nav { background: linear-gradient(to right, #0f172a, #1e3a8a); }
+        
+        /* Sunset: Indigo (Blue-Purple) to contrast the orange */
+        .theme-sunset nav { background: linear-gradient(to right, #4f46e5, #4338ca); }
+
+        /* === GLASS CARD BASE === */
+        .glass-card {
+            -webkit-backdrop-filter: blur(12px);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+            transition: background 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+        }
+        
+        .sub-card {
+            border-radius: 1rem;
+            padding: 1.25rem;
+            transition: background 0.3s ease;
+        }
+
+        /* === THEME SPECIFIC CONTRAST RULES === */
+
+        /* DAY MODE */
+        .theme-day .glass-card { background: rgba(255, 255, 255, 0.85); border-color: white; }
+        .theme-day .sub-card { background: rgba(241, 245, 249, 0.8); border: 1px solid #e2e8f0; }
+        .theme-day h1, .theme-day h2, .theme-day h3 { color: #0f172a; }
+        .theme-day p, .theme-day span { color: #334155; }
+
+        /* SUNSET MODE */
+        .theme-sunset .glass-card { background: rgba(255, 250, 245, 0.9); border-color: rgba(254, 202, 202, 0.6); }
+        .theme-sunset .sub-card { background: rgba(255, 241, 242, 0.8); border: 1px solid #fecaca; }
+        .theme-sunset h1, .theme-sunset h2, .theme-sunset h3 { color: #450a0a; }
+        .theme-sunset p, .theme-sunset span { color: #7f1d1d; }
+
+        /* NIGHT MODE */
+        .theme-night .glass-card { background: rgba(30, 41, 59, 0.8); border-color: rgba(255, 255, 255, 0.1); }
+        .theme-night .sub-card { background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .theme-night h1, .theme-night h2, .theme-night h3 { color: #ffffff; }
+        .theme-night p, .theme-night span { color: #cbd5e1; } 
+        .theme-night .text-slate-800 { color: #ffffff !important; }
+
+        /* 🔥 FORCE WEATHER HEADER TEXT TO BE WHITE 🔥 */
+        .weather-header h2, 
+        .weather-header p,
+        .weather-header div {
+            color: #ffffff !important;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        /* INPUT FIELD OVERRIDES */
+        .theme-night input { background: rgba(0, 0, 0, 0.5); color: white; border: 1px solid rgba(255,255,255,0.2); }
+        .theme-night input::placeholder { color: #94a3b8; }
+        .theme-day input { background: white; color: #0f172a; }
+        .theme-sunset input { background: #fff1f2; color: #450a0a; border: 1px solid #fecaca; }
+
+        /* SUGGESTIONS DROPDOWN */
+        #suggestions { z-index: 1000 !important; }
+        .theme-night #suggestions { background: #1e293b; color: white; border-color: #334155; }
+        .theme-night #suggestions div:hover { background: #334155; }
+        .theme-sunset #suggestions { background: #fff1f2; color: #450a0a; }
+        .theme-sunset #suggestions div:hover { background: #ffe4e6; }
+        
+        /* NAVBAR TEXT COLOR OVERRIDE (Always White) */
+        nav span { color: white !important; }
+
+    </style>
+</head>
+<body class="theme-day min-h-screen flex flex-col transition-all duration-500">
+
+    <nav class="py-5 px-8 flex items-center justify-between sticky top-0 z-50 shadow-lg">
+        <div class="flex items-center gap-2">
+            <span class="font-bold text-2xl md:text-3xl tracking-tight">Weather Based Clothing Recommendation System</span>
+        </div>
+        
+        <div class="flex gap-2 bg-white/20 p-1 rounded-full backdrop-blur-md border border-white/30">
+            <button onclick="setTheme('day')" class="p-2 rounded-full hover:bg-white/30 transition-all text-xl" title="Day Mode">🌤️</button>
+            <button onclick="setTheme('sunset')" class="p-2 rounded-full hover:bg-white/30 transition-all text-xl" title="Sunset Mode">🌅</button>
+            <button onclick="setTheme('night')" class="p-2 rounded-full hover:bg-white/30 transition-all text-xl" title="Night Mode">🌑</button>
+        </div>
+    </nav>
+
+    <main class="flex-grow flex flex-col items-center pt-12 px-4 w-full max-w-2xl mx-auto">
+        
+        <div class="text-center mb-8 glass-card px-10 py-8 rounded-3xl inline-block shadow-lg">
+            <h1 class="text-4xl font-extrabold mb-2 drop-shadow-sm">What to wear today?</h1>
+            <p class="opacity-90 text-lg font-medium">AI-powered fashion advice</p>
+        </div>
+
+        <div class="w-full relative z-40">
+            <div class="flex gap-2">
+                <div class="relative flex-grow group">
+                    <input type="text" id="cityInput" 
+                        class="block w-full px-6 py-4 rounded-xl text-lg outline-none focus:ring-2 focus:ring-blue-400 placeholder-opacity-70 transition-colors" 
+                        placeholder="Search city (e.g. London)..." autocomplete="off">
+                </div>
+                <button onclick="manualSearch()" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-xl font-bold shadow-lg transition-transform active:scale-95">
+                    Go
+                </button>
+            </div>
+            <div id="suggestions" class="absolute left-0 right-0 mt-2 bg-white rounded-xl shadow-2xl overflow-hidden hidden border border-gray-100"></div>
+        </div>
+
+        <div id="loader" class="hidden mt-16 flex flex-col items-center glass-card p-6 rounded-full">
+            <div class="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+        </div>
+
+        <div id="emptyState" class="mt-20 opacity-0"></div>
+
+        <div id="result" class="hidden w-full mt-8 mb-20 fade-in">
+            
+            <div class="weather-header bg-gradient-to-r from-blue-600 to-indigo-600 rounded-3xl p-8 shadow-xl mb-6 flex items-center justify-between border border-white/20">
+                <div>
+                    <h2 id="cityName" class="text-3xl font-bold drop-shadow-md">--</h2>
+                    <p id="conditionDisplay" class="text-lg mt-1 font-medium opacity-90">--</p>
+                </div>
+                <div class="text-right">
+                    <div class="text-6xl font-bold tracking-tighter drop-shadow-md" id="tempDisplay">--°</div>
+                    <div class="text-sm mt-2 font-medium" id="windDisplay">--</div>
+                </div>
+            </div>
+
+            <div class="glass-card rounded-3xl p-8 relative transition-colors duration-500 shadow-2xl">
+                
+                <div class="absolute top-8 right-8 flex items-center gap-2">
+                    <button onclick="startAudio()" class="p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors" title="Replay">
+                        🔄
+                    </button>
+                    <button id="pauseBtn" onclick="togglePause()" class="hidden p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors font-bold w-10">
+                        <span id="pauseIcon">⏸</span>
+                    </button>
+                </div>
+
+                <div class="mb-8 pr-20">
+                    <h3 class="text-2xl font-bold mb-3" id="headline">--</h3>
+                    <p class="leading-relaxed text-lg font-medium opacity-90" id="reasoning">--</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="sub-card">
+                        <div class="flex justify-between mb-2">
+                            <span class="text-xs font-bold uppercase tracking-wider opacity-70">Top</span>
+                            <a id="linkTop" href="#" target="_blank" class="text-xs font-bold text-blue-500 hover:underline">SHOP ↗</a>
+                        </div>
+                        <p class="font-bold text-lg" id="topText">--</p>
+                    </div>
+
+                    <div class="sub-card">
+                        <div class="flex justify-between mb-2">
+                            <span class="text-xs font-bold uppercase tracking-wider opacity-70">Bottom</span>
+                            <a id="linkBottom" href="#" target="_blank" class="text-xs font-bold text-blue-500 hover:underline">SHOP ↗</a>
+                        </div>
+                        <p class="font-bold text-lg" id="bottomText">--</p>
+                    </div>
+
+                    <div class="sub-card md:col-span-2">
+                        <div class="flex justify-between mb-2">
+                            <span class="text-xs font-bold uppercase tracking-wider opacity-70">Footwear</span>
+                            <a id="linkShoes" href="#" target="_blank" class="text-xs font-bold text-blue-500 hover:underline">SHOP ↗</a>
+                        </div>
+                        <p class="font-bold text-lg" id="shoesText">--</p>
+                    </div>
+                </div>
+
+                <div class="mt-8 pt-6 border-t border-black/10 dark:border-white/10">
+                    <p class="text-xs font-bold uppercase tracking-wider opacity-60 mb-4">Accessories</p>
+                    <div class="flex flex-wrap gap-2" id="accessoriesContainer"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // --- THEME LOGIC ---
+        function setTheme(themeName) {
+            document.body.className = `theme-${themeName} min-h-screen flex flex-col transition-all duration-500`;
+        }
+
+        // --- APP LOGIC ---
+        const input = document.getElementById('cityInput');
+        const suggestionsBox = document.getElementById('suggestions');
+        let debounceTimer;
+
+        input.addEventListener('input', function() {
+            const query = this.value;
+            clearTimeout(debounceTimer);
+            if (query.length < 2) { suggestionsBox.classList.add('hidden'); return; }
+
+            debounceTimer = setTimeout(() => {
+                fetch(`/autocomplete?q=${query}`).then(res => res.json()).then(data => {
+                    suggestionsBox.innerHTML = '';
+                    if (data.length > 0) {
+                        suggestionsBox.classList.remove('hidden');
+                        data.forEach(city => {
+                            const div = document.createElement('div');
+                            div.className = "px-6 py-3 cursor-pointer border-b border-gray-100 last:border-0";
+                            div.innerText = city.label;
+                            div.onclick = () => runSearch(city);
+                            suggestionsBox.appendChild(div);
+                        });
+                    } else { suggestionsBox.classList.add('hidden'); }
+                });
+            }, 300);
+        });
+
+        input.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') { suggestionsBox.classList.add('hidden'); manualSearch(); }
+        });
+
+        function manualSearch() {
+            const query = input.value;
+            if(!query) return;
+            fetch(`/autocomplete?q=${query}`).then(res => res.json()).then(data => {
+                if (data.length > 0) runSearch(data[0]);
+                else alert("City not found.");
+            });
+        }
+
+        function runSearch(city) {
+            window.speechSynthesis.cancel(); 
+            input.value = city.label;
+            suggestionsBox.classList.add('hidden');
+            
+            document.getElementById('emptyState').classList.add('hidden');
+            document.getElementById('result').classList.add('hidden');
+            document.getElementById('loader').classList.remove('hidden');
+
+            fetch('/get_recommendation', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ lat: city.lat, lon: city.lon, city: city.label })
+            })
+            .then(res => res.json())
+            .then(data => renderResult(data, city.label))
+            .finally(() => document.getElementById('loader').classList.add('hidden'));
+        }
+
+        function renderResult(data, cityName) {
+            const w = data.weather;
+            let agent;
+            try { agent = typeof data.agent_response === 'string' ? JSON.parse(data.agent_response) : data.agent_response; } 
+            catch(e) { agent = { headline: "Advice", reasoning: data.agent_response, accessories: [] }; }
+
+            document.getElementById('cityName').innerText = cityName;
+            document.getElementById('tempDisplay').innerText = `${w.temp}°`;
+            document.getElementById('conditionDisplay').innerText = w.condition;
+            document.getElementById('windDisplay').innerText = `${w.wind} km/h Wind`;
+
+            document.getElementById('headline').innerText = agent.headline;
+            document.getElementById('reasoning').innerText = agent.reasoning;
+            document.getElementById('topText').innerText = agent.outfit_top;
+            document.getElementById('bottomText').innerText = agent.outfit_bottom;
+            document.getElementById('shoesText').innerText = agent.shoes;
+
+            const base = "https://www.google.com/search?tbm=isch&q=";
+            document.getElementById('linkTop').href = base + encodeURIComponent(agent.outfit_top + " men fashion");
+            document.getElementById('linkBottom').href = base + encodeURIComponent(agent.outfit_bottom + " men fashion");
+            document.getElementById('linkShoes').href = base + encodeURIComponent(agent.shoes + " men fashion");
+
+            const accBox = document.getElementById('accessoriesContainer');
+            accBox.innerHTML = '';
+            (agent.accessories || []).forEach(item => {
+                const span = document.createElement('span');
+                // Smart color logic for accessories
+                span.className = "bg-white/80 border border-gray-200 text-slate-900 px-4 py-2 rounded-full text-sm font-bold shadow-sm";
+                span.innerText = item;
+                accBox.appendChild(span);
+            });
+
+            document.getElementById('result').classList.remove('hidden');
+        }
+
+        let isPaused = false;
+        function startAudio() {
+            window.speechSynthesis.cancel();
+            const text = document.getElementById('headline').innerText + ". " + document.getElementById('reasoning').innerText;
+            const u = new SpeechSynthesisUtterance(text);
+            u.onend = () => document.getElementById('pauseBtn').classList.add('hidden');
+            
+            window.speechSynthesis.speak(u);
+            isPaused = false;
+            
+            document.getElementById('pauseBtn').classList.remove('hidden');
+            document.getElementById('pauseIcon').innerText = "⏸";
+        }
+
+        function togglePause() {
+            if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
+                window.speechSynthesis.pause();
+                document.getElementById('pauseIcon').innerText = "▶";
+            } else {
+                window.speechSynthesis.resume();
+                document.getElementById('pauseIcon').innerText = "⏸";
+            }
+        }
+        
+        document.addEventListener('click', (e) => {
+            if (!input.contains(e.target)) suggestionsBox.classList.add('hidden');
+        });
+    </script>
+</body>
+</html>
