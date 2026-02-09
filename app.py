@@ -2,7 +2,7 @@ import os
 import json
 import requests
 import urllib3
-import time  # <--- Added for waiting
+import time 
 from flask import Flask, render_template, request, jsonify
 
 # Suppress SSL warnings
