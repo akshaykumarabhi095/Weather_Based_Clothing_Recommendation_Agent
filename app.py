@@ -2,8 +2,9 @@ import os
 import json
 import requests
 import urllib3
-import time 
+import time
 from flask import Flask, render_template, request, jsonify
+from flask_caching import Cache  # <--- NEW: Import Cache
 
 # Suppress SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -11,11 +12,18 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 app = Flask(__name__)
 
 # ==========================================
-# 👇 YOUR KEYS ARE HERE 👇
+# ⚡ CONFIGURATION & CACHE SETUP
 # ==========================================
+# Cache config: Stores data in memory (RAM) for speed
+app.config['CACHE_TYPE'] = 'SimpleCache' 
+app.config['CACHE_DEFAULT_TIMEOUT'] = 600 # 10 Minutes
+cache = Cache(app)
+
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 OPENWEATHER_API_KEY = os.environ.get("OPENWEATHER_API_KEY")
-# ==========================================
+
+# Create a session to reuse connections (Faster than opening new ones)
+http = requests.Session()
 
 def get_mock_clothing():
     return json.dumps({
@@ -29,48 +37,41 @@ def get_mock_clothing():
 
 def call_gemini_with_retry(prompt):
     """
-    TOGGLE MODE: 
-    1. Tries gemini-2.5-flash.
-    2. If busy, waits 2s and tries gemini-2.0-flash.
-    3. If busy, waits 2s and tries gemini-2.5-flash again.
-    4. Repeats for up to 10 total attempts.
+    Optimized Retry Logic:
+    - Reduced wait time from 2s -> 1.5s
+    - Toggles models to find a free lane faster
     """
-    # The two models to swap between
     cycle_models = ["gemini-2.5-flash", "gemini-2.0-flash"]
-    
-    # Total attempts (10 attempts * 2s wait = ~20 seconds max)
-    max_total_attempts = 10 
+    max_total_attempts = 6  # Reduced from 10 to prevent 20s waits
     
     headers = {'Content-Type': 'application/json'}
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
 
     for i in range(max_total_attempts):
-        # % logic swaps the model: 0->2.5, 1->2.0, 2->2.5, 3->2.0...
         current_model = cycle_models[i % len(cycle_models)]
-        
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{current_model}:generateContent?key={GEMINI_API_KEY}"
         
         try:
-            print(f"🤖 {current_model} (Attempt {i+1}/{max_total_attempts})...")
-            response = requests.post(url, headers=headers, json=payload, verify=False, timeout=10)
+            print(f"🤖 {current_model} (Attempt {i+1})...")
+            # Use session 'http' for speed
+            response = http.post(url, headers=headers, json=payload, verify=False, timeout=8)
             
             if response.status_code == 200:
                 print(f"✅ Success with {current_model}!")
                 return response.json()['candidates'][0]['content']['parts'][0]['text']
             
             elif response.status_code == 429:
-                print(f"⚠️ {current_model} is busy. Switching model & waiting 2s...")
-                time.sleep(2)
-                continue # Loop continues, which automatically picks the NEXT model
+                print(f"⚠️ {current_model} is busy. Sleeping 1s...")
+                time.sleep(1.5) # Reduced sleep time
+                continue 
             
             else:
-                print(f"❌ Error {response.status_code} with {current_model}. Retrying in 2s...")
-                time.sleep(2)
+                time.sleep(1)
                 continue
 
         except Exception as e:
             print(f"⚠️ Connection Error: {e}")
-            time.sleep(2)
+            time.sleep(1)
 
     print("❌ All AI attempts failed.")
     return None
@@ -82,14 +83,15 @@ def home():
     return render_template('index.html')
 
 @app.route('/autocomplete', methods=['GET'])
+@cache.cached(timeout=300, query_string=True) # <--- CACHE THIS: Saves city searches for 5 mins
 def autocomplete():
     query = request.args.get('q', '')
     if len(query) < 2: return jsonify([])
     
-    # Use Open-Meteo for searching (Better for Indian cities)
+    # Open-Meteo is fast, but caching makes it instant for repeated searches
     url = f"https://geocoding-api.open-meteo.com/v1/search?name={query}&count=5&language=en&format=json"
     try:
-        response = requests.get(url, verify=False, timeout=5)
+        response = http.get(url, verify=False, timeout=3)
         data = response.json()
         suggestions = []
         if 'results' in data:
@@ -107,13 +109,23 @@ def autocomplete():
 def get_recommendation():
     try:
         data = request.json
-        print(f"\n👕 Request: {data.get('city')}")
+        city_label = data.get('city', 'unknown')
+        
+        # ⚡ CHECK CACHE FIRST ⚡
+        # If we already generated an outfit for this city today, return it instantly!
+        cache_key = f"rec_{city_label}_{data['lat']}"
+        cached_response = cache.get(cache_key)
+        if cached_response:
+            print(f"⚡ Serving from Cache: {city_label}")
+            return jsonify(cached_response)
 
-        # 1. FETCH WEATHER (OpenWeatherMap)
+        print(f"\n👕 New Request: {city_label}")
+
+        # 1. FETCH WEATHER
         weather_ctx = {"temp": 25, "condition": "Unknown", "wind": 5, "humidity": 50}
         try:
             w_url = f"https://api.openweathermap.org/data/2.5/weather?lat={data['lat']}&lon={data['lon']}&appid={OPENWEATHER_API_KEY}&units=metric"
-            w_res = requests.get(w_url, verify=False, timeout=5).json()
+            w_res = http.get(w_url, verify=False, timeout=5).json()
             
             if w_res.get('cod') == 200:
                 weather_ctx = {
@@ -123,17 +135,15 @@ def get_recommendation():
                     "wind": round(w_res['wind']['speed'] * 3.6),
                     "condition": w_res['weather'][0]['description'].title()
                 }
-                print(f"🌤️ Weather: {weather_ctx['temp']}°C, {weather_ctx['condition']}")
         except Exception as e:
             print(f"⚠️ Weather Error: {e}")
 
         # 2. CALL AI
         prompt = f"""
         Act as a Style Agent. 
-        Weather: {weather_ctx['temp']}C (Feels like {weather_ctx.get('feels_like')}C), {weather_ctx['condition']}.
-        Humidity: {weather_ctx['humidity']}%, Wind: {weather_ctx['wind']} km/h.
+        Weather: {weather_ctx['temp']}C, {weather_ctx['condition']}.
         
-        Return STRICT JSON (no markdown): {{
+        Return STRICT JSON: {{
             "headline": "Short Headline", "outfit_top": "Top", "outfit_bottom": "Bottom", 
             "shoes": "Shoes", "accessories": ["Item1"], "reasoning": "Why"
         }}
@@ -141,11 +151,16 @@ def get_recommendation():
         
         ai_text = call_gemini_with_retry(prompt)
         
+        result_data = {"weather": weather_ctx, "agent_response": get_mock_clothing()}
+        
         if ai_text:
             clean_text = ai_text.replace("```json", "").replace("```", "").strip()
-            return jsonify({"weather": weather_ctx, "agent_response": clean_text})
-        else:
-            return jsonify({"weather": weather_ctx, "agent_response": get_mock_clothing()})
+            result_data["agent_response"] = clean_text
+            
+            # SAVE TO CACHE for 10 minutes (600s)
+            cache.set(cache_key, result_data, timeout=600)
+
+        return jsonify(result_data)
 
     except Exception as e:
         print(f"🔥 CRITICAL ERROR: {e}")
