@@ -35,9 +35,9 @@ def call_gemini_with_retry(prompt):
     # Optimized list based on your account permissions
     # Optimized list: STABLE model first!
     models = [
-        "gemini-1.5-flash",       # ✅ STANDARD (Guaranteed to work)
-        "gemini-2.0-flash",       # Experimental fallback
-        "gemini-pro"              # Older stable fallback
+        "gemini-2.5-flash",       # ✅ Your preferred model
+        "gemini-2.0-flash-lite",  # Backup (Fast & often less busy)
+        "gemini-1.5-flash"        # Legacy backup
     ]
     
     headers = {'Content-Type': 'application/json'}
