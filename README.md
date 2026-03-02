@@ -32,7 +32,7 @@ The project utilizes a streamlined architecture to ensure a clean separation of 
 | **Backend** | Python 3.11, Flask, Gunicorn |
 | **AI Agent** | Google Gemini API (gemini-2.0-flash / gemini-1.5-flash) |
 | **APIs** | OpenWeather API & Open-Meteo Geocoding API |
-| **Deployment** | Docker, Hugging Face Spaces |
+| **Deployment** | Docker, Hugging Face Spaces, Render |
 
 ---
 
