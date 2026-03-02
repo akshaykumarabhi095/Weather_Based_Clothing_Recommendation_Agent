@@ -114,11 +114,10 @@ python app.py
 ---
 
 ## 👤 Author
----
-Akshay Kumar Bandla
 
-AI & Full-Stack Development Enthusiast
----
+**Akshay Kumar Bandla**  
+AI & Full-Stack Development Enthusiast  
+
 ## 📜 License
 
 This project is intended for educational purposes only.
